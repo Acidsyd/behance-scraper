@@ -8,15 +8,23 @@ app.get('/scrape-behance', async (req, res) => {
   const keyword = req.query.q || '3d';
   const url = `https://www.behance.net/search/projects/?search=${encodeURIComponent(keyword)}`;
 
+  console.log(`🟡 [START] Scraping for keyword: "${keyword}"`);
+  console.log(`🔗 Navigating to: ${url}`);
+
   const browser = await puppeteer.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
-  const page = await browser.newPage();
-
   try {
-    await page.goto(url, { waitUntil: 'networkidle2' });
+    const page = await browser.newPage();
+
+    await page.goto(url, {
+      waitUntil: 'networkidle2',
+      timeout: 15000 // massimo 15s per caricamento pagina
+    });
+
+    console.log('✅ Page loaded, extracting projects…');
 
     const projects = await page.evaluate(() => {
       const items = [];
@@ -30,17 +38,18 @@ app.get('/scrape-behance', async (req, res) => {
       return items;
     });
 
+    console.log(`✅ Extraction complete. Found ${projects.length} projects.`);
     res.json(projects);
+
   } catch (err) {
-    console.error('Scraping error:', err);
-    res.status(500).json({ error: 'Scraping failed' });
+    console.error('❌ Scraping error:', err.message);
+    res.status(500).json({ error: 'Scraping failed', message: err.message });
   } finally {
     await browser.close();
+    console.log('🧹 Browser closed');
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ API running on http://localhost:${PORT}`);
+  console.log(`✅ Behance Scraper API running on http://localhost:${PORT}`);
 });
-
-
