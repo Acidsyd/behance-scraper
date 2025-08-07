@@ -1,15 +1,8 @@
-const express = require('express');
-const puppeteer = require('puppeteer');
-
-const app = express();
-const PORT = process.env.PORT || 3001;
-
-app.get('/scrape-behance', async (req, res) => {
+app.get('/scrape-upwork', async (req, res) => {
   const keyword = req.query.q || '3d';
-  const url = `https://www.behance.net/search/projects/?search=${encodeURIComponent(keyword)}`;
+  const url = `https://www.upwork.com/ab/find-work/?q=${encodeURIComponent(keyword)}`;
 
-  console.log(`🟡 [START] Scraping for keyword: "${keyword}"`);
-  console.log(`🔗 Navigating to: ${url}`);
+  console.log(`🟢 Scraping Upwork for: ${keyword}`);
 
   const browser = await puppeteer.launch({
     headless: true,
@@ -18,38 +11,33 @@ app.get('/scrape-behance', async (req, res) => {
 
   try {
     const page = await browser.newPage();
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
 
-    await page.goto(url, {
-      waitUntil: 'networkidle2',
-      timeout: 15000 // massimo 15s per caricamento pagina
-    });
+    // Attendi il contenitore dei risultati
+    await page.waitForSelector('[data-test="job-tile-list"]', { timeout: 10000 });
 
-    console.log('✅ Page loaded, extracting projects…');
-
-    const projects = await page.evaluate(() => {
+    const jobs = await page.evaluate(() => {
       const items = [];
-      const cards = document.querySelectorAll('a.qa-project-cover');
+      const cards = document.querySelectorAll('[data-test="job-tile-list"] article');
+
       cards.forEach(card => {
-        const title = card.querySelector('.Title-title')?.innerText || null;
-        const href = card.getAttribute('href');
-        const link = href ? `https://www.behance.net${href}` : null;
-        if (title && link) items.push({ title, link });
+        const title = card.querySelector('h4')?.innerText.trim() || null;
+        const link = card.querySelector('a')?.href || null;
+        const budget = card.querySelector('[data-test="budget"]')?.innerText || null;
+        const time = card.querySelector('[data-test="posted-on"]')?.innerText || null;
+
+        if (title && link) items.push({ title, link, budget, time });
       });
+
       return items;
     });
 
-    console.log(`✅ Extraction complete. Found ${projects.length} projects.`);
-    res.json(projects);
-
+    console.log(`✅ Upwork scraping complete. Found ${jobs.length} jobs.`);
+    res.json(jobs);
   } catch (err) {
-    console.error('❌ Scraping error:', err.message);
+    console.error('❌ Upwork scraping error:', err.message);
     res.status(500).json({ error: 'Scraping failed', message: err.message });
   } finally {
     await browser.close();
-    console.log('🧹 Browser closed');
   }
-});
-
-app.listen(PORT, () => {
-  console.log(`✅ Behance Scraper API running on http://localhost:${PORT}`);
 });
